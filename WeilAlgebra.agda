@@ -10,7 +10,7 @@ open import Algebra.Structures
 open import Relation.Binary
 open import Relation.Binary.Core
 open import Function hiding (id)
-open import Relation.Unary hiding (_⟨∘⟩_)
+open import Relation.Unary hiding (_⟨∘⟩_ ; U)
 open import Data.Product
 open import Algebra.Morphism
 open import Data.Product.N-ary
@@ -411,7 +411,7 @@ R-Alg {c′} {ℓ′} =
            ; Lift = Lift
            ; U₁-Lift-inverse = λ {A} {B} {f} → _-R-Module⟶_.⟦⟧-cong f
            ; U₁-liftable = λ {A} {B} {f} → _-R-Alg⟶_.•-homo f
-           ; id-liftable = λ {A} x y → Setoid.refl (R-Algebra.setoid A)
+           ; id-liftable = λ {A} _ _ → Setoid.refl (R-Algebra.setoid A)
            ; o-liftable = λ {A} {B} {C} {f} {g} → o-liftable {A} {B} {C} {f} {g}
            }
   where
@@ -708,89 +708,54 @@ record _-Weil⟶_ (W₁ : WeilAlgebra) (W₂ : WeilAlgebra) : Set (c ⊔ ℓ) wh
 
   open _-R-Alg⟶_ -R-alg⟶ using (-R-module⟶) public
 
-{-
-Weil : Category _ _ _
-Weil = record { isCategory = isCategory }
-  where
-    module UCat = Category (R-Alg {c} {ℓ})
-    toUnderlying = _-Weil⟶_.-R-alg⟶
-    toRAlg = WeilAlgebra.R-algebra
+private
+  U₀ = WeilAlgebra.R-algebra
+  U₁ = _-Weil⟶_.-R-alg⟶
+  Liftable : ∀ W W′ → (f : U₀ W -R-Alg⟶ U₀ W′) → Set _
+  Liftable W W′ f = ∀ x → x ∈ W.augmentation → f.⟦ x ⟧ ∈ W′.augmentation
+    where
+      module f = _-R-Alg⟶_ f
+      module W = WeilAlgebra W
+      module W′ = WeilAlgebra W′
+  Lift : ∀ {A B} → (f : U₀ A -R-Alg⟶ U₀ B) → { pf : Liftable A B f} → A -Weil⟶ B
+  Lift {A} {B} f {pf} = record { J-homo = pf
+                               ; ⟦⟧-linear = f.⟦⟧-linear
+                               ; •-homo = f.•-homo
+                               }
+    where
+      module f = _-R-Alg⟶_ f
 
-    open IsCategory UCat.isCategory
-    open Category (record { isCategory = UCat.isCategory })
-      using (_≈_)
-      renaming (cong to ≈-cong)
-     
-    IdW : ∀{A} → A -Weil⟶ A
-    IdW {A} = record { ⟦_⟧ = ⟦_⟧
-                     ; J-homo = λ x x₁ → x₁
-                     ; •-homo = _-R-Alg⟶_.•-homo (Id′ R-Alg W.R-algebra)
-                     ; ⟦⟧-linear = _-R-Alg⟶_.⟦⟧-linear (Id′ R-Alg W.R-algebra)
-                     }
-      where
-        module W = WeilAlgebra A
-        open W using () renaming (_≈_ to _≋_ ; refl to ≋-refl)
-        open Definitions W.Carrier W.Carrier _≋_ 
-        ⟦_⟧ : Morphism
-        ⟦ x ⟧ = x
-        open EqR W.setoid
+  J-homo : ∀{A B C : WeilAlgebra}
+         → {f : U₀ B -R-Alg⟶ U₀ C} → {g : U₀ A -R-Alg⟶ U₀ B}
+         → Liftable B C f → Liftable A B g → Liftable A C (R-Alg [ f o g ])
+  J-homo {A} {B} {C} {f} {g} f-J-homo g-J-homo x x∈Jₐ =
+    f-J-homo g.⟦ x ⟧ (g-J-homo x x∈Jₐ)
+  
+    where
+      module A = WeilAlgebra A
+      module B = WeilAlgebra B
+      module C = WeilAlgebra C
+      module f = _-R-Alg⟶_ f
+      module g = _-R-Alg⟶_ g
+      open EqR C.setoid
 
+  W-Pair : Σ[ Weil ∈ Category _ _ _ _ ] (Functor Weil R-Alg)
+  W-Pair =
+      extend R-Alg
+      by record { Gadget   = I.0-Setoid WeilAlgebra
+                ; Morph    = _-Weil⟶_
+                ; U₀ = U₀ ; U₁ = U₁ ; Lift = Lift
+                ; ≈₀-cong = PEq.cong U₀
+                ; Liftable = Liftable
+                ; Morph-cong = PEq.cong₂ _-Weil⟶_
+                ; U₁-Lift-inverse = λ {A} {B} {f} → _-R-Alg⟶_.⟦⟧-cong f
+                ; U₁-liftable = λ {A} {B} {f} → _-Weil⟶_.J-homo f
+                ; id-liftable = λ _ pf → pf
+                ; o-liftable = λ {A} {B} {C} {f} {g} → J-homo {A} {B} {C} {f} {g}
+                }
 
-     
-    _o_ : ∀{W₁ W₂ W₃ : WeilAlgebra} → W₂ -Weil⟶ W₃ → W₁ -Weil⟶ W₂ → W₁ -Weil⟶ W₃
-    _o_ {W₁} {W₂} {W₃} g f = record { •-homo = •-homo
-                                   ; J-homo = J-homo
-                                   ; ⟦⟧-linear = linear
-                                   }
-      where
-        module G = _-Weil⟶_ g
-        module F = _-Weil⟶_ f
-        module A = WeilAlgebra W₁
-        module B = WeilAlgebra W₂
-        module C = WeilAlgebra W₃
-     
-        open Definitions A.Carrier C.Carrier C._≈_
-     
-        ⟦_⟧ : Morphism
-        ⟦_⟧ = G.⟦_⟧ ∘ F.⟦_⟧
-     
-        linear : Linear A.R-module C.R-module ⟦_⟧
-        linear = _-R-Alg⟶_.⟦⟧-linear (R-Alg [ G.-R-alg⟶ o F.-R-alg⟶ ])
-     
-        •-homo : Homomorphic₂ ⟦_⟧ A._•_ C._•_
-        •-homo = _-R-Alg⟶_.•-homo (R-Alg [ G.-R-alg⟶ o F.-R-alg⟶ ])
-     
-        J-homo : ∀ x → x ∈ A.augmentation → ⟦ x ⟧ ∈ C.augmentation
-        J-homo x x∈Jₐ = G.J-homo  F.⟦ x ⟧ (F.J-homo x x∈Jₐ)
+Weil : Category _ _ _ _
+Weil = proj₁ W-Pair
 
-    _∼_ : ∀{A B} → Rel (A -Weil⟶ B) _
-    f ∼ g = R-Alg [ toUnderlying f ≈ toUnderlying g ]
-
-    isEquiv : ∀{A B} → IsEquivalence (_∼_ {A} {B})
-    isEquiv {A} {B} =
-      record { refl  = λ {f} → ≈-refl {toUnderlying f}
-             ; sym   = λ {f} {g} → ≈-sym {toUnderlying f} {toUnderlying g}
-             ; trans = λ {f} {g} {h} → ≈-trans {toUnderlying f} {toUnderlying g} {toUnderlying h}
-             }
-      where
-        open IsEquivalence (isEquivalence {toRAlg A} {toRAlg B})
-          using ()
-          renaming ( refl  to ≈-refl
-                   ; sym   to ≈-sym
-                   ; trans to ≈-trans
-                   )
-
-    isCategory : IsCategory WeilAlgebra _-Weil⟶_ _∼_ _o_ IdW
-    isCategory = record { cong = λ {A} {B} {C} {f} {f′} {g} {g′} →
-                                      ≈-cong
-                                         {f = toUnderlying f}
-                                         {toUnderlying f′}
-                                         {toUnderlying g}
-                                         {toUnderlying g′}                                       
-                        ; isEquivalence = λ {A} {B} → isEquiv {A} {B}
-                        ; identityˡ = identityˡ ∘ toUnderlying
-                        ; identityʳ = identityʳ ∘ toUnderlying
-                        ; assoc = λ f g h → assoc (toUnderlying f) (toUnderlying g) (toUnderlying h)
-                        }
-
--}
+U : Functor Weil R-Alg
+U = proj₂ W-Pair
