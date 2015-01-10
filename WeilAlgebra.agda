@@ -728,16 +728,9 @@ private
   J-homo : ∀{A B C : WeilAlgebra}
          → {f : U₀ B -R-Alg⟶ U₀ C} → {g : U₀ A -R-Alg⟶ U₀ B}
          → Liftable B C f → Liftable A B g → Liftable A C (R-Alg [ f o g ])
-  J-homo {A} {B} {C} {f} {g} f-J-homo g-J-homo x x∈Jₐ =
+  J-homo {g = g} f-J-homo g-J-homo x x∈Jₐ =
     f-J-homo g.⟦ x ⟧ (g-J-homo x x∈Jₐ)
-  
-    where
-      module A = WeilAlgebra A
-      module B = WeilAlgebra B
-      module C = WeilAlgebra C
-      module f = _-R-Alg⟶_ f
-      module g = _-R-Alg⟶_ g
-      open EqR C.setoid
+      where module g = _-R-Alg⟶_ g
 
   W-Pair : Σ[ Weil ∈ Category _ _ _ _ ] (Functor Weil R-Alg)
   W-Pair =
