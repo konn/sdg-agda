@@ -9,7 +9,7 @@ open import R-Module.Free R
 open import Algebra.Structures
 open import Relation.Binary
 open import Relation.Binary.Core
-open import Function
+open import Function hiding (id)
 open import Relation.Unary hiding (_⟨∘⟩_)
 open import Data.Product
 open import Algebra.Morphism
@@ -21,6 +21,7 @@ open import Function.Equality
 
 open import Categories
 
+import HomSetoid as I
 import Algebra.FunctionProperties as FunctionProperties
 import Relation.Binary.EqReasoning as EqR
 import Relation.Binary.PropositionalEquality as PEq
@@ -400,13 +401,24 @@ R-Alg : ∀{c′ ℓ′} → Category _ _ _ _
 R-Alg {c′} {ℓ′} =
   subCategory
     {Base = R-Mod {c′} {ℓ′}}
-    record { U₀ = U₀
+    record { Gadget = I.0-Setoid (R-Algebra c′ ℓ′)
+           ; Morph = _-R-Alg⟶_
+           ; U₀ = U₀
            ; U₁ = U₁
            ; Morph-cong = PEq.cong₂ _-R-Alg⟶_
            ; ≈₀-cong = PEq.cong U₀
            ; Liftable = Liftable
+           ; Lift = Lift
+           ; U₁-Lift-inverse = λ {A} {B} {f} → _-R-Module⟶_.⟦⟧-cong f
+           ; U₁-liftable = λ {A} {B} {f} → _-R-Alg⟶_.•-homo f
+           ; id-liftable = λ {A} x y → Setoid.refl (R-Algebra.setoid A)
+           ; o-liftable = λ {A} {B} {C} {f} {g} → o-liftable {A} {B} {C} {f} {g}
            }
   where
+    open Category (R-Mod {c′} {ℓ′})
+      using (isEquivalence₁)
+    open I.IsEquivalence isEquivalence₁
+      renaming (refl to ≈₁-refl)
     U₀ = R-Algebra.R-module
     U₁ = _-R-Alg⟶_.-R-module⟶
     Liftable : (a b : R-Algebra c′ ℓ′) → (f : U₀ a -R-Module⟶ U₀ b) → Set _
@@ -417,98 +429,33 @@ R-Alg {c′} {ℓ′} =
         module f = _-R-Module⟶_ f
         open Definitions A.Carrier B.Carrier B._≈_
     Lift : ∀{A B} → (f : U₀ A -R-Module⟶ U₀ B) → {pf : Liftable A B f} → A -R-Alg⟶ B
-    Lift f {pf} = record { •-homo = pf }
-
-{-
-R-Alg : ∀{c′ ℓ′} → Category _ _ _
-R-Alg {c′} {ℓ′} = record { isCategory = isCategory }
-  where
-    module UCat = Category (R-Mod {c′} {ℓ′})
-    open IsCategory UCat.isCategory
-      renaming (cong to ≋-cong)
-
-    toRMod = _-R-Alg⟶_.-R-module⟶
-
-    _o_ : ∀{A B C : R-Algebra c′ ℓ′} → (B -R-Alg⟶ C) → (A -R-Alg⟶ B) → (A -R-Alg⟶ C)
-    _o_ {A} {B} {C} g f =
-      record { ⟦⟧-linear = _-R-Module⟶_.⟦⟧-linear (R-Mod [ G.-R-module⟶ o F.-R-module⟶ ])
-             ; •-homo   = •-homo}
+    Lift f {pf} = record { ⟦⟧-linear = f.⟦⟧-linear
+                         ; •-homo = pf
+                         }
+      where module f = _-R-Module⟶_ f
+    o-liftable : ∀{a b c} {g : U₀ b -R-Module⟶ U₀ c} {f : U₀ a -R-Module⟶ U₀ b}
+               → Liftable b c g
+               → Liftable a b f
+               → Liftable a c (R-Mod [ g o f ])
+    o-liftable {a} {b} {c} {g} {f} g-•-homo f-•-homo x y =
+      begin
+        ⟦ x A.• y ⟧
+      ≡⟨⟩
+        g.⟦ f.⟦ x A.• y ⟧ ⟧
+      ≈⟨ g.⟦⟧-cong (f-•-homo x y) ⟩
+        g.⟦ f.⟦ x ⟧ B.• f.⟦ y ⟧ ⟧
+      ≈⟨ g-•-homo f.⟦ x ⟧ f.⟦ y ⟧ ⟩
+        ⟦ x ⟧ C.• ⟦ y ⟧
+      ∎
       where
-        module G = _-R-Alg⟶_ g
-        module F = _-R-Alg⟶_ f
-        module W₁ = R-Algebra A
-        module W₂ = R-Algebra B
-        module W₃ = R-Algebra C
+        module g = _-R-Module⟶_ g
+        module f = _-R-Module⟶_ f
+        module A = R-Algebra a
+        module B = R-Algebra b
+        module C = R-Algebra c
+        ⟦_⟧ = g.⟦_⟧ ∘ f.⟦_⟧
+        open EqR C.setoid
 
-        open EqR W₃.setoid
-        open Definitions W₁.Carrier W₃.Carrier W₃._≈_
-
-        ⟦_⟧ : Morphism
-        ⟦_⟧ = G.⟦_⟧ ∘ F.⟦_⟧
-
-        •-homo : Homomorphic₂ ⟦_⟧ W₁._•_ W₃._•_
-        •-homo x y =
-          begin
-            ⟦ x W₁.• y ⟧
-          ≡⟨⟩
-            G.⟦ F.⟦ x W₁.• y ⟧ ⟧
-          ≈⟨ G.⟦⟧-cong (F.•-homo x y) ⟩
-            G.⟦ F.⟦ x ⟧ W₂.• F.⟦ y ⟧ ⟧
-          ≈⟨ G.•-homo F.⟦ x ⟧ F.⟦ y ⟧ ⟩
-            ⟦ x ⟧ W₃.• ⟦ y ⟧
-          ∎
-
-    _≈_ : ∀{W₁ W₂} → Rel (W₁ -R-Alg⟶ W₂) _
-    _≈_ {W₁} {W₂} f g = F.Πsetoid ≋ G.Πsetoid
-      where
-        module S = R-Algebra W₁
-        module T = R-Algebra W₂
-        module F = _-R-Alg⟶_ f
-        module G = _-R-Alg⟶_ g
-        open Setoid (S.setoid ⇨ T.setoid) renaming (_≈_ to _≋_)
-
-    isEquiv : ∀ {A B} → IsEquivalence _≈_
-    isEquiv {A} {B} = record { refl = λ {f} → ≋-refl {toΠ f}
-                             ; sym = λ {f} {g} → ≋-sym {toΠ f} {toΠ g}
-                             ; trans = λ {f} {g} {h} → ≋-trans {toΠ f} {toΠ g} {toΠ h}
-                             }
-      where
-        module F = R-Algebra A
-        module T = R-Algebra B
-        toΠ : A -R-Alg⟶ B → F.setoid ⟶ T.setoid
-        toΠ = _-R-Alg⟶_.Πsetoid
-        open Setoid (F.setoid ⇨ T.setoid)
-             renaming ( refl  to ≋-refl
-                      ; sym   to ≋-sym
-                      ; trans to ≋-trans
-                      ; _≈_   to _≋_)
-     
-    IdV : ∀{A} → A -R-Alg⟶ A
-    IdV {A} = record { ⟦_⟧ = ⟦_⟧
-                     ; •-homo = λ x y → ≋-refl
-                     ; ⟦⟧-linear = _-R-Module⟶_.⟦⟧-linear (Id′ R-Mod W.R-module)
-                     }
-      where
-        module W = R-Algebra A
-        open W renaming (_≈_ to _≋_ ; refl to ≋-refl)
-        open Definitions Carrier Carrier _≋_ 
-        ⟦_⟧ : Morphism
-        ⟦ x ⟧ = x
-        open EqR setoid
-    
-    isCategory : IsCategory (R-Algebra c′ ℓ′) _-R-Alg⟶_ _≈_ _o_ IdV
-    isCategory = record { cong = λ {A} {B} {C} {f} {f′} {g} {g′} →
-                                      ≋-cong
-                                         {f = toRMod f}
-                                         {toRMod f′}
-                                         {toRMod g}
-                                         {toRMod g′}
-                        ; isEquivalence = λ {A} {B} → isEquiv {A} {B}
-                        ; identityˡ = identityˡ ∘ toRMod
-                        ; identityʳ = identityʳ ∘ toRMod
-                        ; assoc = λ f g h → assoc (toRMod f) (toRMod g) (toRMod h)
-                        }
--}
 record IsCommutativeR-Algebra
          {c′ ℓ′} {A : Set c′}
          (_≈_ : Rel A ℓ′) (_+_ : Op₂ A)
