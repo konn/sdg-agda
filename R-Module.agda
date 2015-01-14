@@ -1,4 +1,5 @@
 open import Level hiding (Lift)
+import Level as L
 open import Algebra 
 module R-Module {c ℓ} (R : CommutativeRing c ℓ) where
 import Algebra.FunctionProperties as FunctionProperties
@@ -21,6 +22,7 @@ open import Relation.Binary.Core
 import HomSetoid as I
 open import HomSetoid using (Set′ ; 0-Setoid )
 open import Categories.Setoids
+open import LevelLifting
 
 open CommutativeRing R hiding   (ring)
                        renaming ( Carrier to Coeff
@@ -139,6 +141,32 @@ record R-Module c′ ℓ′ : Set (suc (c ⊔ ℓ ⊔ c′ ⊔ ℓ′)) where
           )
     public
 
+lift-IsR-Module : ∀ {c′ ℓ′ c″ ℓ″} {C : Set c′} {_≈_ : Rel C ℓ′} {_+_ : Op₂ C}
+                    {_*>_ : Coeff → C → C} { -_ : Op₁ C } {0# : C}
+                 → IsR-Module _≈_ _+_ _*>_ -_ 0#
+                 → IsR-Module (lift-Rel {ℓ = ℓ″} _≈_)
+                               (lift-Op₂ _+_)
+                               (λ x → lift-Op₁ (_*>_ x))
+                               (lift-Op₁ -_) (lift {ℓ = c″} 0#)
+lift-IsR-Module isR =
+  record { isAbelianGroup = lift-IsAbelianGroup isAbelianGroup
+         ; *>-cong = λ x≈y u≈v → lift $ *>-cong x≈y $ lower u≈v
+         ; *>-assoc = λ a b x → lift $ *>-assoc a b $ lower x
+         ; *>-+-distrib = λ a x y → lift $ *>-+-distrib a (lower x) (lower y)
+         ; +-*>-distrib = λ a b x → lift $ +-*>-distrib a b $ lower x
+         ; *>-identity = λ x → lift $ *>-identity $ lower x
+         }
+  where
+    open IsR-Module isR
+
+lift-R-Module : ∀{c ℓ c′ ℓ′} → R-Module c′ ℓ′ → R-Module (c′ ⊔ c) (ℓ′ ⊔ ℓ)
+lift-R-Module {c} {ℓ} V = record { Carrier = L.Lift {ℓ = c} Carrier
+                                         ; _≈_    = lift-Rel {ℓ = ℓ} _≈_
+                                         ; isR-Module = lift-IsR-Module isR-Module
+                                         }
+  where
+    open R-Module V
+
 record Linear {m₁ m₂ m₃ m₄} (From : R-Module m₁ m₂) (To : R-Module m₃ m₄)
               (⟦_⟧ : R-Module.Carrier From → R-Module.Carrier To) : Set (c ⊔ m₁ ⊔ m₂ ⊔ m₃ ⊔ m₄) where
   private
@@ -150,6 +178,22 @@ record Linear {m₁ m₂ m₃ m₄} (From : R-Module m₁ m₂) (To : R-Module m
     +-homo  : Homomorphic₂ ⟦_⟧ F._+_  T._+_
     *>-homo : ∀ a x → ⟦ a F.*> x ⟧ T.≈ a T.*> ⟦ x ⟧
     0#-homo : Homomorphic₀ ⟦_⟧ F.0#   T.0#
+
+lift-Linear : ∀ {c ℓ m₁ m₂ m₃ m₄} {A : R-Module m₁ m₂} {B : R-Module m₃ m₄}
+                {⟦_⟧ : R-Module.Carrier A → R-Module.Carrier B}
+              → Linear A B ⟦_⟧
+              → Linear
+                  (lift-R-Module {c = m₃ ⊔ c} {ℓ = m₄ ⊔ ℓ} A)
+                  (lift-R-Module {c = m₁ ⊔ c} {ℓ = m₂ ⊔ ℓ} B)
+                  (lift-Morph {ℓ = c} ⟦_⟧)
+lift-Linear lin =
+  record { ⟦⟧-cong = λ x → lift $ ⟦⟧-cong $ lower x
+         ; +-homo = λ x y → lift $ +-homo (lower x) (lower y)
+         ; *>-homo = λ a x → lift $ *>-homo a (lower x)
+         ; 0#-homo = lift 0#-homo
+         }
+  where
+    open Linear lin
 
 coeffModule : R-Module c ℓ
 coeffModule = record { isR-Module = isR-Module }
@@ -272,6 +316,22 @@ Bilinear : ∀ {m₁ m₂ n₁ n₂ k₁ k₂}
          → (R-Module.Carrier From₁ → R-Module.Carrier From₂ → R-Module.Carrier To)
          → Set _
 Bilinear F₁ F₂ T ⟦_,_⟧ = (∀ x → Linear F₁ T (flip ⟦_,_⟧ x)) ×  (∀ x → Linear F₂ T (⟦_,_⟧ x))
+
+lift-Bilinear : ∀ {c ℓ m₁ m₂ m₃ m₄ k₁ k₂}
+                  {A : R-Module m₁ m₂}
+                  {B : R-Module m₃ m₄}
+                  {C : R-Module k₁ k₂}
+                  {⟦_,_⟧ : R-Module.Carrier A → R-Module.Carrier B → R-Module.Carrier C}
+              → Bilinear A B C ⟦_,_⟧
+              → Bilinear
+                  (lift-R-Module {c = m₃ ⊔ k₁ ⊔ c} {ℓ = m₄ ⊔ k₂ ⊔ ℓ} A)
+                  (lift-R-Module {c = m₁ ⊔ k₁ ⊔ c} {ℓ = m₂ ⊔ k₂ ⊔ ℓ} B)
+                  (lift-R-Module {c = m₁ ⊔ m₃ ⊔ c} {ℓ = m₂ ⊔ m₄ ⊔ ℓ} C)
+                  (lift-Morph₂ {ℓ = c} ⟦_,_⟧)
+
+lift-Bilinear {d} {k} {m₁} {m₂} {m₃} {m₄} {k₁} {k₂} (lin₁ , lin₂) =
+  ( (λ x → lift-Linear {c = m₃ ⊔ d} {ℓ = m₄ ⊔ k} (lin₁ (lower x)))
+  , (λ x → lift-Linear {c = m₁ ⊔ d} {ℓ = m₂ ⊔ k} (lin₂ (lower x))))
 
 record -_×_-Bilinear⟶_ {m₁ m₂ n₁ n₂ k₁ k₂}
        (From₁ : R-Module m₁ m₂)

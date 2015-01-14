@@ -1,12 +1,14 @@
 {-# OPTIONS --universe-polymorphism #-}
 module Categories where
 open import Level hiding (Lift)
+import Level as L
 open import Function
 open import Relation.Binary
 open import Data.Product
 open import Function.Equality hiding (flip ; _∘_)
 open import Relation.Binary.PropositionalEquality
             using (_≡_)
+import Relation.Binary.PropositionalEquality as PEq
 import Relation.Binary.EqReasoning as EqR
 
 import HomSetoid as I
@@ -124,12 +126,12 @@ record IsFunctor {c₀ c₁ ℓ₀ ℓ₁ c₀′ c₁′ ℓ₀′ ℓ₁′ : 
                  (C : Category c₀ c₁ ℓ₀ ℓ₁) (D : Category c₀′ c₁′ ℓ₁′ ℓ₀′)
                  (⟦_⟧₀ : Obj C → Obj D)
                  (⟦_⟧₁ : ∀{A B} → Hom C A B → Hom D ⟦ A ⟧₀ ⟦ B ⟧₀)
-                 : Set (suc (c₀ ⊔ c₁ ⊔ ℓ₀ ⊔ ℓ₁ ⊔ c₀′ ⊔ c₁′ ⊔ ℓ₀′ ⊔ ℓ₁′)) where
+                 : Set (c₀ ⊔ c₁ ⊔ ℓ₀ ⊔ ℓ₁ ⊔ c₀′ ⊔ c₁′ ⊔ ℓ₀′ ⊔ ℓ₁′) where
   module F = Category C
   module T = Category D
   field
     ⟦_⟧₁-cong : ∀{A B} {f g : F.Hom A B} → C [ f ≈₁ g ] → D [ ⟦ f ⟧₁ ≈₁ ⟦ g ⟧₁ ]
-    Id-cong : {A : Obj C} → D [ ⟦ F.Id′ A ⟧₁ ≈₁ T.Id′ ⟦ A ⟧₀ ]
+    Id-homo : {A : Obj C} → D [ ⟦ F.Id′ A ⟧₁ ≈₁ T.Id′ ⟦ A ⟧₀ ]
     o-homo  : ∀{a b c} → (f : Hom C b c) → (g : Hom C a b)
             → D [ ⟦ f F.o g ⟧₁ ≈₁ ⟦ f ⟧₁ T.o ⟦ g ⟧₁ ]
 
@@ -157,7 +159,7 @@ record SubCategory {c₀ c₁ ℓ₀ ℓ₁} (Base : Category c₀ c₁ ℓ₀ �
     Morph-cong : ∀{i i′ j j′} → i ≈₀ i′ → j ≈₀ j′ → Morph i j ≡ Morph i′ j′
     U₀ : Gad → Obj Base
     U₁ : ∀{g g′} → Morph g g′ → Hom Base (U₀ g) (U₀ g′)
-    ≈₀-cong : _≈₀_ =[ U₀ ]⇒ _∼₀_
+    ⦃ ≈₀-cong ⦄ : _≈₀_ =[ U₀ ]⇒ _∼₀_
     Liftable : ∀ A B → Hom Base (U₀ A) (U₀ B) → Set r
     Lift  : ∀{A B} → (f : Hom Base (U₀ A) (U₀ B)) → {pf : Liftable A B f} → Morph A B
     U₁-Lift-inverse : ∀{A B} {f : Hom Base (U₀ A) (U₀ B)} {pf : Liftable A B f}
@@ -349,7 +351,7 @@ Forgetful {C = C} sub = record { isFunctor = isFunctor }
     isFunctor : IsFunctor D C U₀ U₁
     isFunctor = record { o-homo   = U₁-o-distrib
                        ; ⟦_⟧₁-cong = λ x → x
-                       ; Id-cong  = U₁-Lift-inverse
+                       ; Id-homo  = U₁-Lift-inverse
                        }
 
 extend_by_ : ∀{c₀ c₁ ℓ₀ ℓ₁ c₀′ c₁′ ℓ r}
@@ -357,3 +359,19 @@ extend_by_ : ∀{c₀ c₁ ℓ₀ ℓ₁ c₀′ c₁′ ℓ r}
             → SubCategory Base c₀′ c₁′ ℓ r
             → Σ[ C ∈ Category c₀′ c₁′ ℓ ℓ₁ ] Functor C Base
 extend Base by def = (subCategory def , Forgetful def)
+
+instance ≡-hint : ∀{c} {d} {A : Set c} {B : Set d} {P : A → B} → _≡_ =[ P ]⇒ _≡_
+≡-hint {P = P} = PEq.cong P
+
+
+ContravariantFunctor : ∀{a b c d a′ b′ c′ d′}
+                       (C : Category a b c d) → (D : Category a′ b′ c′ d′)
+                     → Set (suc (a ⊔ b ⊔ c ⊔ d ⊔ a′ ⊔ b′ ⊔ c′ ⊔ d′))
+ContravariantFunctor C D = Functor C (D ᵒᵖ)
+
+IsContravariantFunctor : ∀{a b c d a′ b′ c′ d′}
+                     → (C : Category a b c d) → (D : Category a′ b′ c′ d′)
+                     → (⟦_⟧₀ : Obj C → Obj D)
+                     → (⟦_⟧₁ : ∀{A B} → Hom C A B → Hom D ⟦ B ⟧₀ ⟦ A ⟧₀)
+                     → Set (a ⊔ b ⊔ c ⊔ d ⊔ a′ ⊔ b′ ⊔ c′ ⊔ d′)
+IsContravariantFunctor C D = IsFunctor C (D ᵒᵖ)

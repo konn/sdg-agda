@@ -1,5 +1,6 @@
 {-# OPTIONS --universe-polymorphism #-}
 open import Level hiding (zero ; Lift)
+import Level as L
 open import Algebra
 
 module WeilAlgebra {c ℓ} (R : CommutativeRing c ℓ) where
@@ -14,13 +15,19 @@ open import Relation.Unary hiding (_⟨∘⟩_ ; U)
 open import Data.Product
 open import Algebra.Morphism
 open import Data.Product.N-ary
+import Relation.Binary.SetoidReasoning as SetR
 open import Data.Fin using (Fin) renaming (zero to OZ ; suc to OS)
 open import Function.Equality
-            hiding   (setoid ; flip)
+            hiding   (setoid ; flip ; const)
             renaming (_∘_ to _⟨∘⟩_)
+import Function.Equality as FEq
 
 open import Categories
+open import Categories.Setoids
+open import Categories.Sets
+open import LevelLifting
 
+import Categories.Properties as CatProps
 import HomSetoid as I
 import Algebra.FunctionProperties as FunctionProperties
 import Relation.Binary.EqReasoning as EqR
@@ -532,9 +539,15 @@ product {k = 0}   i _ _ = i
 product {k = S n} i _*_ p = p OZ * product {k = n} i _*_ (λ d → p (OS d))
 
 private
-  1#0 : ∀{n} → Fin (S n) → Coeff
-  1#0 OZ     = 1R
-  1#0 (OS k) = 0R
+  1#0 : ∀{n} → I.0-Setoid (Fin (S n)) ⟶ setoidR
+  1#0 = record { _⟨$⟩_ = fun
+               ; cong = λ {i} {j} i≈j →
+                          IsEquivalence.reflexive
+                            R-isEquivalence
+                            (PEq.cong fun i≈j)
+               }
+    where
+      fun = λ { OZ → 1R ; (OS _) → 0R }
 
 record IsAugmentedCommutativeR-Algebra
        {n : ℕ} (_•_ : Op₂ (R-Module.Carrier ((S n) DimFreeModule)))
@@ -546,9 +559,9 @@ record IsAugmentedCommutativeR-Algebra
     open Definitions Carrier Coeff _≈R_
 
     augmentation : Pred Carrier ℓ
-    augmentation x = x OZ ≈R 0R
+    augmentation x = (x ⟨$⟩ OZ) ≈R 0R
     π₀ : Carrier → Coeff
-    π₀ f = f OZ
+    π₀ f = f ⟨$⟩ OZ
     1# : Carrier
     1# = 1#0
 
@@ -605,7 +618,7 @@ record AugmentedCommutativeR-Algebra : Set (ℓ ⊔ c) where
   Carrier = R-Module.Carrier R-module
 
   augmentation : Pred Carrier ℓ
-  augmentation x = x OZ ≈R 0R
+  augmentation x = (x ⟨$⟩ OZ) ≈R 0R
 
   π₀ : R-algebra -R-Alg⟶ coeffAlg
   π₀ = record { ⟦⟧-linear = ⟦⟧-linear
@@ -614,20 +627,18 @@ record AugmentedCommutativeR-Algebra : Set (ℓ ⊔ c) where
     where
       open Linear π₀-linear using (⟦⟧-cong ; +-homo ; *>-homo; 0#-homo)
       ⟦_⟧ : Carrier → Coeff
-      ⟦ f ⟧ = f OZ
+      ⟦ f ⟧ = f ⟨$⟩ OZ
       ⟦⟧-linear : Linear R-module coeffModule ⟦_⟧
-      ⟦⟧-linear = record { ⟦⟧-cong = ⟦⟧-cong
+      ⟦⟧-linear = record { ⟦⟧-cong = λ {a} {b} → ⟦⟧-cong {a} {b}
                         ; +-homo  = +-homo
                         ; *>-homo = *>-homo
                         ; 0#-homo = 0#-homo
                         }
 
-
 ACR-Algebra = AugmentedCommutativeR-Algebra
 module ACR-Algebra = AugmentedCommutativeR-Algebra
 
 
-              
 
 record IsWeilAlgebra {n} (_•_ : Op₂ (R-Module.Carrier $ (S n) DimFreeModule)) : Set (c ⊔ ℓ) where
   field
@@ -637,7 +648,7 @@ record IsWeilAlgebra {n} (_•_ : Op₂ (R-Module.Carrier $ (S n) DimFreeModule)
   field
     nilpotent : Σ[ k ∈ ℕ ]
                    (∀ (F : Fin k → Carrier)
-                   → (∀ i → F i OZ ≈R 0R)
+                   → (∀ i → F i ⟨$⟩ OZ ≈R 0R)
                    → product 1#0 _•_ F ≈ 0# )
   open IsAugmentedCommutativeR-Algebra isAugmentedCommutativeR-Algebra public
 
@@ -706,7 +717,7 @@ record _-Weil⟶_ (W₁ : WeilAlgebra) (W₂ : WeilAlgebra) : Set (c ⊔ ℓ) wh
                     ; •-homo = •-homo
                     }
 
-  open _-R-Alg⟶_ -R-alg⟶ using (-R-module⟶) public
+  open _-R-Alg⟶_ -R-alg⟶ using (-R-module⟶ ; ⟦⟧-cong) public
 
 private
   U₀ = WeilAlgebra.R-algebra
@@ -747,8 +758,216 @@ private
                 ; o-liftable = λ {A} {B} {C} {f} {g} → J-homo {A} {B} {C} {f} {g}
                 }
 
+_=R-Alg⇒_ : ∀{a₁ a₂ b₁ b₂} → (A : R-Algebra a₁ a₂) (B : R-Algebra b₁ b₂) → Setoid _ _
+A =R-Alg⇒ B = record { Carrier = A -R-Alg⟶ B
+                      ; _≈_ = λ f g → ∀ {x y} → x ≈₁ y → _-R-Alg⟶_.⟦_⟧ f x ≈₂ _-R-Alg⟶_.⟦_⟧ g y
+                      ; isEquivalence = record
+                        { refl = λ {f} → ⟦⟧-cong f
+                        ; sym = λ f∼g x≈y → ≈₂-sym (f∼g (≈₁-sym x≈y))
+                        ; trans = λ f∼g g∼h x≈y → (f∼g x≈y) ⟨ ≈₂-trans ⟩ g∼h ≈₁-refl
+                        }
+                      }
+  where
+    ⟦⟧-cong = _-R-Alg⟶_.⟦⟧-cong
+    open module From = Setoid (R-Algebra.setoid A)
+         renaming (_≈_ to _≈₁_ ; refl to ≈₁-refl ; sym to ≈₁-sym)
+    open module To   = Setoid (R-Algebra.setoid B)
+         renaming (_≈_ to _≈₂_ ; sym to ≈₂-sym ; trans to ≈₂-trans)
+
 Weil : Category _ _ _ _
 Weil = proj₁ W-Pair
 
 U : Functor Weil R-Alg
 U = proj₂ W-Pair
+
+lift-IsDistributiveR-Algebra : ∀{c ℓ c′ ℓ′} {A : Set c′}
+                    {_≈_ : Rel A ℓ′} {_+_ _•_ : Op₂ A}
+                    {_*>_ : Coeff → A → A} { -_ : Op₁ A } {0# : A}
+                 → IsDistributiveR-Algebra _≈_ _+_ _*>_ -_ _•_ 0#
+                 → IsDistributiveR-Algebra
+                       (lift-Rel {c = c} {ℓ = ℓ} _≈_)
+                       (lift-Op₂ {ℓ = c} _+_)
+                       (λ x → lift-Op₁ (_*>_ x))
+                       (lift-Op₁ -_) (lift-Op₂ _•_)
+                       (lift {ℓ = c} 0#)
+lift-IsDistributiveR-Algebra {d} {k} {c′} {ℓ′} isR =
+  record { isR-Module = lift-IsR-Module isR-Module
+         ; •-cong = λ x≈y u≈v → lift (•-cong (lower x≈y) (lower u≈v))
+         ; •-bilinear = ((λ x → proj₁ {!•-bilinear!} {!!})
+                        ,(λ x → {!!}))
+         }
+  where
+    open IsDistributiveR-Algebra isR
+
+
+lift-IsAssociativeR-Algebra : ∀{c′ ℓ′ d k} {A : Set c′}
+                    {_≈_ : Rel A ℓ′} {_+_ _•_ : Op₂ A}
+                    {_*>_ : Coeff → A → A} { -_ : Op₁ A } {0# : A}
+                 → IsAssociativeR-Algebra _≈_ _+_ _*>_ -_ _•_ 0#
+                 → IsAssociativeR-Algebra
+                       (lift-Rel {c = d} {ℓ = k} _≈_)
+                       (lift-Op₂ {ℓ = d} _+_)
+                       (λ x → lift-Op₁ (_*>_ x))
+                       (lift-Op₁ -_) (lift-Op₂ _•_)
+                       (lift 0#)
+lift-IsAssociativeR-Algebra {d} {k} isR =
+  record { isDistributiveR-Algebra = lift-IsDistributiveR-Algebra isDistributiveR-Algebra
+         ; •-assoc = λ x y z → lift (•-assoc (lower x) (lower y) (lower z))
+         }
+  where
+    open IsAssociativeR-Algebra isR
+
+lift-IsR-Algebra : ∀{c′ ℓ′ d k} {A : Set c′}
+                    {_≈_ : Rel A ℓ′} {_+_ _•_ : Op₂ A}
+                    {_*>_ : Coeff → A → A} { -_ : Op₁ A } {0# 1# : A}
+                 → IsR-Algebra _≈_ _+_ _*>_ -_ _•_ 0# 1#
+                 → IsR-Algebra
+                       (lift-Rel {c = d} {ℓ = k} _≈_)
+                       (lift-Op₂ {ℓ = d} _+_)
+                       (λ x → lift-Op₁ (_*>_ x))
+                       (lift-Op₁ -_) (lift-Op₂ _•_)
+                       (lift 0#) (lift 1#)
+lift-IsR-Algebra {d} {k} isR =
+  record { •-identity = ((λ x → lift $ proj₁ •-identity (lower x))
+                        ,(λ x → lift $ proj₂ •-identity (lower x)))
+         ; isAssociativeR-Algebra = lift-IsAssociativeR-Algebra isAssociativeR-Algebra
+         }
+  where
+    open IsR-Algebra isR
+
+lift-R-Algebra : ∀{c′ ℓ′ c ℓ} → R-Algebra c′ ℓ′ → R-Algebra (c′ ⊔ c) (ℓ′ ⊔ ℓ)
+lift-R-Algebra {c′} {ℓ′} {d} {k} W =
+  record { Carrier = L.Lift { ℓ = d } Carrier
+         ; _≈_  = lift-Rel { ℓ = k } _≈_
+         ; _+_  = lift-Op₂ _+_
+         ; _•_  = lift-Op₂ _•_
+         ; _*>_ = λ a b → L.lift (a *> lower b)
+         ; -_   = lift-Op₁ -_
+         ; 0#   = lift 0#
+         ; 1#   = lift 1#
+         ; isR-Algebra = lift-IsR-Algebra isR-Algebra
+         }
+  where
+    open R-Algebra W
+
+Spec₀ : ∀{c′ ℓ′ c″ ℓ″} (A : R-Algebra c′ ℓ′) (W : R-Algebra c″ ℓ″)
+    → Setoid (ℓ″ ⊔ c″ ⊔ ℓ′ ⊔ c′ ⊔ c) (ℓ″ ⊔ c″ ⊔ ℓ′)
+Spec₀ A W = W =R-Alg⇒ A
+
+Spec₁ : ∀{c′ ℓ′} {A : R-Algebra c′ ℓ′} { B : R-Algebra c′ ℓ′ }
+      → (C : R-Algebra c′ ℓ′)
+      → (A -R-Alg⟶ B)
+      → Hom Setoids (Spec₀ C B) (Spec₀ C A)
+Spec₁ {B = B} C f = 
+            record { _⟨$⟩_ = λ g → (R-Alg [ g o f ])
+                   ; cong = λ {g₀} {g′₀} g∼g′ {x} {y} x≈y →
+                            let open EqR (R-Algebra.setoid C)
+                                open Category Setoids
+                                open Setoid (R-Algebra.setoid B)
+                                  renaming (refl to B-refl)
+                                f′ = _-R-Alg⟶_.Πsetoid f
+                                g = _-R-Alg⟶_.Πsetoid g₀
+                                g′ = _-R-Alg⟶_.Πsetoid g′₀
+                                Πcong = Π.cong
+                            in begin
+                                 g o f′ ⟨$⟩ x
+                               ≈⟨ Πcong (g o f′) x≈y ⟩
+                                 g o f′ ⟨$⟩ y
+                               ≡⟨⟩
+                                 g ⟨$⟩ (f′ ⟨$⟩ y)
+                               ≈⟨ g∼g′ B-refl ⟩
+                                 g′ ⟨$⟩ (f′ ⟨$⟩ y)
+                               ≡⟨⟩
+                                 g′ o f′ ⟨$⟩ y
+                               ∎
+                   }
+
+{-
+Spec : ∀(A : R-Algebra ) → ContravariantFunctor Weil (Setoids {c ⊔ ℓ} {c ⊔ ℓ})
+Spec A = record { ⟦_⟧₀ = ⟦_⟧₀
+                ; ⟦_⟧₁ = Spec₁ A ∘ _-Weil⟶_.-R-alg⟶
+                ; isFunctor = isFunctor
+                }
+  where
+    module Setoids = Category (Setoids {c ⊔ ℓ} {c ⊔ ℓ})
+    module R-Alg = Category (R-Alg {c ⊔ ℓ} {ℓ ⊔ c})
+    module Weil = Category Weil
+    ⟦_⟧₀ : WeilAlgebra → Setoid _ _
+    ⟦_⟧₀ = Spec₀ A ∘ WeilAlgebra.R-algebra
+    ⟦_⟧₁ : ∀{A B} → A -Weil⟶ B → ⟦ B ⟧₀ ⟶ ⟦ A ⟧₀
+    ⟦_⟧₁ = Spec₁ A ∘ _-Weil⟶_.-R-alg⟶
+    Id-homo : {A : WeilAlgebra} → Setoids [ ⟦ Id′ Weil A ⟧₁ ≈₁ Id′ Setoids ⟦ A ⟧₀ ]
+    Id-homo {A} {x} {y} x≈y =
+      begin
+        ⟦ Id′ Weil A ⟧₁ ⟨$⟩ x
+      ≡⟨⟩
+        (λ g → R-Alg [ g o Id′ R-Alg (WeilAlgebra.R-algebra A) ] ) x
+      ≡⟨⟩
+        R-Alg [ x o Id′ R-Alg (WeilAlgebra.R-algebra A) ]
+      ≈⟨ R-Alg.identityʳ x ⟩
+        x
+      ≈⟨ x≈y ⟩
+        y
+      ≡⟨⟩
+        Id′ Setoids ⟦ A ⟧₀ ⟨$⟩ y
+      ∎
+      where
+        open EqR ⟦ A ⟧₀
+        open Setoids using (_o_)
+
+    o-homo : ∀{a b c} → (f : b -Weil⟶ c) → (g : a -Weil⟶ b)
+           → Setoids [ ⟦ f Weil.o g ⟧₁ ≈₁ ⟦ g ⟧₁ Setoids.o ⟦ f ⟧₁ ]
+    o-homo {A} {B} {C} f g {x} {y} x≈y =
+      begin
+        ⟦ f Weil.o g ⟧₁ ⟨$⟩ x
+      ≡⟨⟩
+        x R-Alg.o (toA f R-Alg.o toA g)
+      ≈⟨ R-Alg.o-cong {f = x} {f′ = y}
+                      {g = toA f R-Alg.o toA g}
+                      {g′ = toA f R-Alg.o toA g}
+                      x≈y (≈₁-refl {x = toA f R-Alg.o toA g}) ⟩
+        y R-Alg.o (toA f R-Alg.o toA g)
+      ≈⟨ R-Alg.assoc y (toA f) (toA g) ⟩
+        (y R-Alg.o toA f) R-Alg.o toA g
+      ≡⟨⟩
+       (⟦ g ⟧₁ Setoids.o ⟦ f ⟧₁) ⟨$⟩ y
+      ∎
+      where
+        toA = _-Weil⟶_.-R-alg⟶
+        open EqR ⟦ A ⟧₀
+        open Setoids using (_o_)
+        open I.IsEquivalence R-Alg.isEquivalence₁
+          renaming (refl to ≈₁-refl)
+    isFunctor : IsContravariantFunctor Weil Setoids ⟦_⟧₀ ⟦_⟧₁
+    isFunctor = record { Id-homo  = λ {A} {x} {y} → Id-homo {A} {x} {y}
+                       ; o-homo   = λ {A} {B} {C} → o-homo {A} {B} {C}
+                       ; ⟦_⟧₁-cong = λ {W₁} {W₂} {f₀} {g₀} f≈g {x} {y} x≈y →
+                                       let open EqR ⟦ W₁ ⟧₀
+                                           f = _-Weil⟶_.-R-alg⟶ f₀
+                                           g = _-Weil⟶_.-R-alg⟶ g₀
+                                           open I.IsEquivalence R-Alg.isEquivalence₁
+                                             renaming (refl to ≈₁-refl)
+                                       in begin
+                                            ⟦ f₀ ⟧₁ ⟨$⟩ x
+                                          ≡⟨⟩
+                                            x R-Alg.o f
+                                          ≈⟨ R-Alg.o-cong {f = x} {f′ = y} {g = f} {g′ = g}
+                                                          x≈y f≈g ⟩
+                                            y R-Alg.o g
+                                          ≡⟨⟩
+                                            ⟦ g₀ ⟧₁ ⟨$⟩ y
+                                          ∎
+                       
+                       }
+-}
+{-
+R^_ : ∀{c′ ℓ′} → Setoid c′ ℓ′ → R-Algebra _ _
+R^ I = record { Carrier = Carrier
+              ; isR-Algebra = isR-Algebra
+              }
+  where
+    open R-Module (FreeModule I)
+    _•_ : Op₂ Carrier
+    f • g = λ n → f n *R g n
+    isR-Algebra = record {}
+-}
